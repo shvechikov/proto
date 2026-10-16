@@ -47,3 +47,7 @@
 ## Откуда это
 
 Метод вырос из двух личных проектов автора, сделанных с Claude Code. Его сверили с обзором open-source-подходов осени 2026 года: [research/2026-10-15-landscape.md](research/2026-10-15-landscape.md). Что меняется от версии к версии — [CHANGELOG.md](CHANGELOG.md).
+
+## Лицензия
+
+[MIT](LICENSE).
