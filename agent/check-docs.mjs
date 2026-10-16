@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // Механическая проверка документов (метод proto, слой 2):
 //   1) относительные ссылки в *.md ведут на существующие файлы и папки;
-//   2) AGENTS.md и CLAUDE.md не разрослись (они загружаются в каждую сессию агента).
+//   2) каждый AGENTS.md и CLAUDE.md (включая вложенные) не разросся — они загружаются в сессии агента.
+// Пути, упомянутые как `код`, не проверяются: слишком много ложных срабатываний (имена в деревьях,
+// пути будущего проекта). Такой дрейф ловит гармонизация (/harmonize).
 // Запуск: node scripts/check-docs.mjs [корень]. Код выхода 1 — есть проблемы.
 // Без зависимостей: нужен только Node 18+.
 
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, resolve, relative } from 'node:path';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { join, dirname, resolve, relative, basename } from 'node:path';
 
 const MAX_LINES = 150;
 const MAX_BYTES = 12_000;
+const AGENT_FILES = new Set(['AGENTS.md', 'CLAUDE.md']);
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'target', 'dist', 'build', 'gen', 'coverage',
   'test-results', 'playwright-report', '.venv', '.next', '.svelte-kit',
@@ -28,34 +31,32 @@ function* markdownFiles(dir) {
   }
 }
 
-// Убираем блоки кода и `код в строке`: ссылки в примерах проверять не нужно.
-function stripCode(text) {
-  return text
-    .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '')
-    .replace(/`[^`\n]*`/g, '');
-}
-
+// Блоки кода убираем: ссылки и пути в примерах проверять не нужно.
+const stripFences = (text) => text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
 const LINK = /!?\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
 
+const where = (file) => relative(root, file) || basename(file);
+
 for (const file of markdownFiles(root)) {
-  const text = stripCode(readFileSync(file, 'utf8'));
-  for (const [, target] of text.matchAll(LINK)) {
+  const raw = readFileSync(file, 'utf8');
+  const text = stripFences(raw);
+  const name = basename(file);
+
+  for (const [, target] of text.replace(/`[^`\n]*`/g, '').matchAll(LINK)) {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('#')) continue; // http:, mailto:, якорь
     let path = target.split('#')[0].split('?')[0];
     try { path = decodeURIComponent(path); } catch { /* оставляем как есть */ }
     const abs = path.startsWith('/') ? join(root, path) : resolve(dirname(file), path);
-    if (!existsSync(abs)) problems.push(`${relative(root, file)}: битая ссылка → ${target}`);
+    if (!existsSync(abs)) problems.push(`${where(file)}: битая ссылка → ${target}`);
   }
-}
 
-for (const name of ['AGENTS.md', 'CLAUDE.md']) {
-  const file = join(root, name);
-  if (!existsSync(file)) continue;
-  const bytes = statSync(file).size;
-  const lines = readFileSync(file, 'utf8').split('\n').length;
+  if (!AGENT_FILES.has(name)) continue;
+
+  const bytes = Buffer.byteLength(raw);
+  const lines = raw.length === 0 ? 0 : raw.split('\n').length - (raw.endsWith('\n') ? 1 : 0);
   if (lines > MAX_LINES || bytes > MAX_BYTES) {
     problems.push(
-      `${name}: ${lines} строк, ${bytes} байт (предел ${MAX_LINES} строк и ${MAX_BYTES} байт). ` +
+      `${where(file)}: ${lines} строк, ${bytes} байт (предел ${MAX_LINES} строк и ${MAX_BYTES} байт). ` +
       'Перенеси подробности в docs/ или skill и оставь ссылку — см. docs/method/agent.md.',
     );
   }

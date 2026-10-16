@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && sed -n '/^## Сейчас/,/^## Дальше/p' docs/roadmap.md && echo \"Последняя запись журнала: $(ls docs/journal 2>/dev/null | tail -1)\""
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && date '+Сегодня: %F' && awk '/^## Сейчас/{f=1;print;next} f&&/^## /{exit} f' docs/roadmap.md && echo \"Последняя запись журнала: $(ls docs/journal 2>/dev/null | tail -1)\""
           }
         ]
       }
